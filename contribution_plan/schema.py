@@ -1,7 +1,9 @@
 import graphene
 import graphene_django_optimizer as gql_optimizer
 
+from django.core.exceptions import PermissionDenied
 from django.db.models import Q
+from django.utils.translation import gettext as _
 
 from core.schema import signal_mutation_module_validate
 from contribution_plan.gql import ContributionPlanGQLType, ContributionPlanBundleGQLType, \
@@ -23,6 +25,13 @@ from contribution_plan.models import ContributionPlanBundle, ContributionPlan, \
 from core.schema import OrderedDjangoFilterConnectionField
 from .models import ContributionPlanMutation, ContributionPlanBundleMutation
 from .apps import ContributionPlanConfig
+
+
+def _check_query_perms(info, perms):
+    """The search right (an anonymous caller holds none)."""
+    user = info.context.user
+    if user is None or getattr(user, "is_anonymous", True) or not user.has_perms(perms):
+        raise PermissionDenied(_("unauthorized"))
 
 
 class Query(graphene.ObjectType):
@@ -162,14 +171,18 @@ class Query(graphene.ObjectType):
         return gql_optimizer.query(query, info)
 
     def resolve_validate_contribution_plan_code(self, info, **kwargs):
+        # a code oracle for the users who may search the plans only
+        _check_query_perms(info, ContributionPlanConfig.gql_query_contributionplan_perms)
         errors = ContributionPlanService.check_unique_code(code=kwargs['contribution_plan_code'])
         return False if errors else True
 
     def resolve_validate_contribution_plan_bundle_code(self, info, **kwargs):
+        _check_query_perms(info, ContributionPlanConfig.gql_query_contributionplanbundle_perms)
         errors = ContributionPlanBundleService.check_unique_code(code=kwargs['contribution_plan_bundle_code'])
         return False if errors else True
 
     def resolve_validate_payment_plan_code(self, info, **kwargs):
+        _check_query_perms(info, ContributionPlanConfig.gql_query_paymentplan_perms)
         errors = PaymentPlanService.check_unique_code(code=kwargs['payment_plan_code'])
         return False if errors else True
 

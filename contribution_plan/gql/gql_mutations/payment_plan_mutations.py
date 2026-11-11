@@ -61,7 +61,11 @@ class UpdatePaymentPlanMutation(BaseHistoryModelUpdateMutationMixin, BaseMutatio
             data.pop('client_mutation_id')
         if "client_mutation_label" in data:
             data.pop('client_mutation_label')
-        updated_object = cls._model.objects.filter(id=data['id']).first()
+        # looked up among the rows the user may read (core row security), never the
+        # whole table; a row out of reach does not exist for them
+        updated_object = cls._target_queryset(user).filter(id=data['id']).first()
+        if updated_object is None:
+            cls._object_not_exist_exception(obj_uuid=data['id'])
         content_type = ContentType.objects.get(model=data['benefit_plan_type'].lower())
         data['benefit_plan_type'] = content_type
         [setattr(updated_object, key, data[key]) for key in data]
